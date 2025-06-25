@@ -1,0 +1,10 @@
+build/
+install/
+bin/
+
+.vscode/
+
+# libraries
+kdl_parser/
+orocos_kinematics_dynamics/
+pinocchio/
