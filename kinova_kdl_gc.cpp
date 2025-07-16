@@ -1,10 +1,15 @@
-
+#include <cstddef>
+#include <cstdio>
+#include <cstring>
 #include <iostream>
+#include <sstream>
 #include <string>
 #include <vector>
 #include <math.h>
 #include <unistd.h>
 #include <time.h>
+#include <chrono>
+#include <csignal>
 
 #include "kortex_api/common/KDetailedException.h"
 
@@ -18,12 +23,17 @@
 #include "kortex_api/client/TransportClientUdp.h"
 #include "kortex_api/client/TransportClientTcp.h"
 
-#include "kdl_parser.hpp"
+#include "kdl_parser/kdl_parser.hpp"
 
 #include "kdl/chain.hpp"
 #include "kdl/kinfam_io.hpp"
 #include "kdl/frames_io.hpp"
 #include "kdl/chainidsolver_recursive_newton_euler.hpp"
+
+#include "spdlog/spdlog.h"
+#include "spdlog/sinks/basic_file_sink.h"
+
+volatile sig_atomic_t kill_flag = 0;
 
 #define DEG_TO_RAD(x) (x) * M_PI / 180.0
 #define RAD_TO_DEG(x) (x) * 180.0 / M_PI
@@ -34,9 +44,56 @@ namespace k_api = Kinova::Api;
 #define PORT_REAL_TIME 10001
 #define IP_ADDRESS "192.168.1.12"
 #define NUM_JOINTS 7
- 
+
+void handle_kill_signal(int sig) {
+  static int signal_caught = 0;
+  if (!signal_caught) {
+    signal_caught = 1;
+    kill_flag = 1;
+    printf("Caught kill signal %d (%s)\n", sig, strsignal(sig));
+  }
+}
+
+// Convert KDL::JntArray to CSV string
+std::string jntArrayToCSV(const KDL::JntArray& arr) {
+    std::ostringstream oss;
+    for (unsigned int i = 0; i < arr.rows(); ++i) {
+        oss << arr(i);
+        if (i != arr.rows() - 1) oss << ",";
+    }
+    return oss.str();
+}
+
+// Convert KDL::Wrench to CSV string (6 elements: force + torque)
+std::string wrenchToCSV(const KDL::Wrench& wrench) {
+    std::ostringstream oss;
+    oss << wrench.force.x() << "," << wrench.force.y() << "," << wrench.force.z()
+        << "," << wrench.torque.x() << "," << wrench.torque.y() << "," << wrench.torque.z();
+    return oss.str();
+}
+
 int main(int argc, char ** argv)
 {
+  struct sigaction sa;
+  sa.sa_handler = handle_kill_signal;
+  sigemptyset(&sa.sa_mask);
+  sa.sa_flags = 0;
+
+  for (int i = 1; i < NSIG; ++i) {
+    if (sigaction(i, &sa, NULL) == -1) {
+      perror("sigaction error");
+    }
+  }
+
+  // std::shared_ptr<spdlog::logger> logger;
+  //
+  // try {
+  //   logger = spdlog::basic_logger_mt("kinova_logger", "logs/kinova-kdl-gc-log.csv");
+  // } catch (const spdlog::spdlog_ex &ex) {
+  //   std::cout << "Log init failed: " << ex.what() << std::endl;
+  // }
+  // logger->set_pattern("%v");
+
   // --------------------- kinova ----------------------
   auto error_callback = [](k_api::KError err){ cout << "_________ callback error _________" << err.toString(); };
 
@@ -72,31 +129,87 @@ int main(int argc, char ** argv)
 
   // --------------------- kinova ----------------------
 
-  // const std::string urdf_filename = std::string("../gen3.urdf");
+  const std::string urdf_filename = std::string("../gen3.urdf");
   
-  // KDL::Tree tree;
-  // if (!kdl_parser::treeFromFile(urdf_filename, tree)) {
-  //   std::cerr << "Failed to construct KDL tree from URDF file: " << urdf_filename << std::endl;
-  //   return -1;
-  // }
-  // KDL::Chain chain;
-  // if (!tree.getChain("gen3_base_link", "gen3_end_effector_link", chain)) {
-  //   std::cerr << "Failed to get KDL chain from tree." << std::endl;
-  //   return -1;
-  // }
-
-  const std::string urdf_filename = std::string("../eddie.urdf");
-
   KDL::Tree tree;
   if (!kdl_parser::treeFromFile(urdf_filename, tree)) {
     std::cerr << "Failed to construct KDL tree from URDF file: " << urdf_filename << std::endl;
     return -1;
   }
   KDL::Chain chain;
-  if (!tree.getChain("kinova_right_base_link", "kinova_right_end_effector_link", chain)) {
+  if (!tree.getChain("gen3_base_link", "gen3_end_effector_link", chain)) {
     std::cerr << "Failed to get KDL chain from tree." << std::endl;
     return -1;
   }
+
+  KDL::Frame transforms[8] = {
+    KDL::Frame(
+      KDL::Rotation(
+          0.9999934, -0.0034287, 0.0011825,
+          0.0034252,  0.9999899, 0.0028966,
+        -0.0011924, -0.0028925, 0.9999951
+      ),
+      KDL::Vector(-0.0009869, -0.0006710, -0.0007926)
+    ),
+    KDL::Frame(
+      KDL::Rotation(
+          0.9999951, 0.0016397, -0.0026737,
+        -0.0016348, 0.9999970, 0.0018380,
+          0.0026767, -0.0018336, 0.9999947
+      ),
+      KDL::Vector(0.0001692, -0.0007934, 0.0002771)
+    ),
+    KDL::Frame(
+      KDL::Rotation(
+          0.9999958, -0.0028914, 0.0002131,
+          0.0028914,  0.9999958, 0.0001711,
+        -0.0002136, -0.0001705, 1.0000000
+      ),
+      KDL::Vector(-0.0000965, -0.0002349, -0.0009027)
+    ),
+    KDL::Frame(
+      KDL::Rotation(
+          0.9999885, -0.0043961, 0.0019156,
+          0.0043967,  0.9999903, -0.0003092,
+        -0.0019142, 0.0003176, 0.9999981
+      ),
+      KDL::Vector(0.0001928, -0.0009025, 0.0003440)
+    ),
+    KDL::Frame(
+      KDL::Rotation(
+          0.9999879, 0.0035842, -0.0033711,
+        -0.0035816, 0.9999933, 0.0007867,
+          0.0033739, -0.0007746, 0.9999940
+      ),
+      KDL::Vector(0.0001264, -0.0002953, -0.0008272)
+    ),
+    KDL::Frame(
+      KDL::Rotation(
+          0.9999933, -0.0004036, -0.0036404,
+          0.0003839,  0.9999852, -0.0054272,
+          0.0036425,  0.0054257, 0.9999786
+      ),
+      KDL::Vector(-0.0000924, -0.0008274, 0.0000606)
+    ),
+    KDL::Frame(
+      KDL::Rotation(
+          0.9999814, 0.0060969, 0.0003375,
+        -0.0060981, 0.9999743, 0.0037794,
+        -0.0003144, -0.0037814, 0.9999928
+      ),
+      KDL::Vector(0.0000838, -0.0001367, -0.0000495)
+    ),
+    KDL::Frame(
+      KDL::Rotation(
+          0.9999782, -0.0060921, 0.0025659,
+          0.0060982,  0.9999786, -0.0023815,
+        -0.0025513, 0.0023971, 0.9999939
+      ),
+      KDL::Vector(-0.0003371, 0.0007925, 0.0000552)
+    )
+  };
+
+  printf("\n\n");
 
   int num_joints = chain.getNrOfJoints();
   std::cout << "Number of joints in the chain: " << num_joints << std::endl;
@@ -104,8 +217,35 @@ int main(int argc, char ** argv)
   int num_segments = chain.getNrOfSegments();
   std::cout << "Number of segments in the chain: " << num_segments << std::endl;
 
+  KDL::Chain nChain;
+
+  for (unsigned int i = 0; i < chain.getNrOfSegments(); ++i) {
+    const KDL::Segment& segment = chain.getSegment(i);
+    const std::string& name = segment.getName();
+    const KDL::Frame& f_tip = segment.getFrameToTip();
+    
+    // std::cout << "Segment [" << i << "] " << name << ":\n" << f_tip << "\n\n";
+
+    KDL::Frame f_new = f_tip * transforms[i];
+
+    // std::cout << "nSegment [" << i << "] " << name << ":\n" << f_new << "\n\n";
+
+    KDL::Segment updated_segment(
+      name,                          // Same name
+      segment.getJoint(),            // Same joint
+      f_new,                     // Updated fixed transform
+      segment.getInertia()           // Same inertia
+    );
+
+    nChain.addSegment(updated_segment);
+  }
+
   // KDL::ChainIdSolver_RNE id_solver(chain, KDL::Vector(0, 0, -9.81));
-  KDL::ChainIdSolver_RNE id_solver(chain, KDL::Vector(-9.1, -1.01, 1.1));
+  // KDL::ChainIdSolver_RNE nid_solver(nChain, KDL::Vector(0, 0, -9.81));
+
+  KDL::ChainIdSolver_RNE id_solver(chain, KDL::Vector(-9.5, -0.99, 1.11));
+  KDL::ChainIdSolver_RNE nid_solver(nChain, KDL::Vector(-9.5, -0.99, 1.11));
+
 
   KDL::JntArray q(num_joints);
   KDL::JntArray qd(num_joints);
@@ -118,16 +258,18 @@ int main(int argc, char ** argv)
   }
 
   id_solver.CartToJnt(q, qd, qdd, f_ext, tau);
+  std::cout << "Tau : " << tau << std::endl;
 
-  std::cout << "Joint torques: " << tau << std::endl;
+  KDL::JntArray ntau(num_joints);
+  nid_solver.CartToJnt(q, qd, qdd, f_ext, ntau);
+  std::cout << "nTau: " << ntau << std::endl;
 
   // clearing faults
-  base->ClearFaults();
   try {
       base->ClearFaults();
   } catch(...) {
       std::cout << "Unable to clear robot faults" << std::endl;
-      return false;
+      return 1;
   }
 
   // ---------------------- torque mode ----------------------
@@ -170,7 +312,7 @@ int main(int argc, char ** argv)
 
       std::this_thread::sleep_for(std::chrono::milliseconds(2000));
 
-      return false;
+      return 1;
   } catch (std::runtime_error& ex2) {
       std::cout << "Error: " << ex2.what() << std::endl;
 
@@ -180,13 +322,22 @@ int main(int argc, char ** argv)
 
       std::this_thread::sleep_for(std::chrono::milliseconds(2000));
 
-      return false;
+      return 1;
   }
 
   float control_freq = 1000.0; // Control frequency in Hz
 
+  // logger->info("q0,q1,q2,q3,q4,q5,qd0,qd1,qd2,qd3,qd4,qd5,"
+                 // "qdd0,qdd1,qdd2,qdd3,qdd4,qdd5,"
+                 // "tau0,tau1,tau2,tau3,tau4,tau5");
+
   // ---------------------- control loop ----------------------
+  std::cout << "starting gravity comp" << std::endl;
   while(true) {
+    if (kill_flag) {
+      break;
+    }
+
     auto start_time = std::chrono::high_resolution_clock::now();
 
     // update joint positions and velocities
@@ -197,7 +348,14 @@ int main(int argc, char ** argv)
     }
 
     // compute joint torques for gravity compensation
-    id_solver.CartToJnt(q, qd, qdd, f_ext, tau);
+    // id_solver.CartToJnt(q, qd, qdd, f_ext, tau);
+    nid_solver.CartToJnt(q, qd, qdd, f_ext, tau);
+
+    // logger->info("{},{},{},{}", 
+    //     jntArrayToCSV(q),
+    //     jntArrayToCSV(qd),
+    //     jntArrayToCSV(qdd),
+    //     jntArrayToCSV(tau));
 
     // update the base command with the computed torques
     for (unsigned int i = 0; i < NUM_JOINTS; i++)

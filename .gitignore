@@ -3,6 +3,7 @@ install/
 bin/
 
 .vscode/
+.cache/
 
 # libraries
 kdl_parser/

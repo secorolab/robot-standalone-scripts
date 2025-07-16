@@ -17,7 +17,7 @@
 #include "kortex_api/client/TransportClientUdp.h"
 #include "kortex_api/client/TransportClientTcp.h"
 
-#include "kdl_parser.hpp"
+#include "kdl_parser/kdl_parser.hpp"
 
 #include "kdl/chain.hpp"
 #include "kdl/kinfam_io.hpp"
@@ -31,7 +31,7 @@ namespace k_api = Kinova::Api;
 
 #define PORT 10000
 #define PORT_REAL_TIME 10001
-#define IP_ADDRESS "192.168.1.12"
+#define IP_ADDRESS "192.168.1.10"
 #define NUM_JOINTS 7
 
 int main()
@@ -89,7 +89,7 @@ int main()
     int num_segments = chain.getNrOfSegments();
     std::cout << "Number of segments in the chain: " << num_segments << std::endl;
 
-    KDL::ChainIdSolver_RNE id_solver(chain, KDL::Vector(-9.5, -1.1, 1.23));
+    KDL::ChainIdSolver_RNE id_solver(chain, KDL::Vector(0.0, 0.0, -9.81));
 
     KDL::JntArray q(num_joints);
     KDL::JntArray qd(num_joints);

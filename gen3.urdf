@@ -335,9 +335,9 @@
   </joint>
   <link name="gen3_bracelet_link">
     <inertial>
-      <origin rpy="0 0 0" xyz="-9.3E-05 0.000132 -0.022905"/>
-      <mass value="0.364"/>
-      <inertia ixx="0.000214" ixy="0" ixz="1E-06" iyy="0.000223" iyz="-2E-06" izz="0.00024"/>
+      <origin rpy="0 0 0" xyz="-0.000281 -0.011402 -0.029798"/>
+      <mass value="0.5"/>
+      <inertia ixx="0.000587" ixy="0.000003" ixz="0.000003" iyy="0.000369" iyz="0.000118" izz="0.000609"/>
     </inertial>
     <visual>
       <origin rpy="0 0 0" xyz="0 0 0"/>
