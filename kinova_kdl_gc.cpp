@@ -250,15 +250,17 @@ int main(int argc, char ** argv)
   KDL::JntArray q(num_joints);
   KDL::JntArray qd(num_joints);
   KDL::JntArray qdd(num_joints);
-  KDL::JntArray tau(num_joints);
+  KDL::JntArray mtau(num_joints);
+  KDL::Wrenches f_ext(num_segments, KDL::Wrench::Zero());
+  
+  KDL::JntArray gtau(num_joints);
+  KDL::JntArray etau(num_joints);
+  KDL::JntArray ctau(num_joints);
 
-  KDL::Wrenches f_ext(num_segments);
-  for (int i = 0; i < num_segments; ++i) {
-    f_ext[i] = KDL::Wrench::Zero();
-  }
+  KDL::JntArray zeroArray(num_joints);
 
-  id_solver.CartToJnt(q, qd, qdd, f_ext, tau);
-  std::cout << "Tau : " << tau << std::endl;
+  id_solver.CartToJnt(q, qd, qdd, f_ext, gtau);
+  std::cout << "Tau : " << gtau << std::endl;
 
   KDL::JntArray ntau(num_joints);
   nid_solver.CartToJnt(q, qd, qdd, f_ext, ntau);
@@ -286,12 +288,10 @@ int main(int argc, char ** argv)
 
     // Initialize each actuator to their current position
     for (unsigned int i = 0; i < NUM_JOINTS; i++)
-    {
       base_command.add_actuators()->set_position(base_feedback.actuators(i).position());
-    }
 
     // Send a first frame
-    base_feedback = base_cyclic->Refresh(base_command);
+    base_feedback = base_cyclic->Refresh(base_command, 0);
 
     // Set actuators in torque mode now that the command is equal to measure
     auto control_mode_message = k_api::ActuatorConfig::ControlModeInformation();
@@ -301,7 +301,43 @@ int main(int argc, char ** argv)
 
     for (int id = 0; id < NUM_JOINTS; id++)
     {
+      for (unsigned int i = 0; i < NUM_JOINTS; i++)
+        base_command.mutable_actuators(i)->set_position(base_feedback.actuators(i).position());
+
+      for (int j = 0; j < id+1; j++)
+        base_command.mutable_actuators(j)->set_torque_joint(base_feedback.actuators(j).torque());
+
       actuator_config->SetControlMode(control_mode_message, id+1);
+
+      // Incrementing identifier ensures actuators can reject out of time frames
+      base_command.set_frame_id(base_command.frame_id() + 1);
+      if (base_command.frame_id() > 65535)
+        base_command.set_frame_id(0);
+
+      for (int idx = 0; idx < NUM_JOINTS; idx++)
+      {
+        base_command.mutable_actuators(idx)->set_command_id(base_command.frame_id());
+      }
+
+      try
+      {
+        base_feedback = base_cyclic->Refresh(base_command, 0);
+      }
+      catch (k_api::KDetailedException& ex)
+      {
+        std::cout << "Kortex exception: " << ex.what() << std::endl;
+
+        std::cout << "Error sub-code: " << k_api::SubErrorCodes_Name(k_api::SubErrorCodes((ex.getErrorInfo().getError().error_sub_code()))) << std::endl;
+      }
+      catch (std::runtime_error& ex2)
+      {
+        std::cout << "runtime error: " << ex2.what() << std::endl;
+      }
+      catch(...)
+      {
+        std::cout << "Unknown error." << std::endl;
+      }
+
     }
   } catch (k_api::KDetailedException& ex) {
       std::cout << "API error: " << ex.what() << std::endl;
@@ -333,6 +369,7 @@ int main(int argc, char ** argv)
 
   // ---------------------- control loop ----------------------
   std::cout << "starting gravity comp" << std::endl;
+
   while(true) {
     if (kill_flag) {
       break;
@@ -345,23 +382,41 @@ int main(int argc, char ** argv)
     {
       q(i) = DEG_TO_RAD(base_feedback.actuators(i).position());
       qd(i) = DEG_TO_RAD(base_feedback.actuators(i).velocity());
+
+      mtau(i) = base_feedback.actuators(i).torque();
     }
+
+    // if (q(1) > DEG_TO_RAD(180)) q(1) -= DEG_TO_RAD(360);
+    // if (q(3) > DEG_TO_RAD(180)) q(3) -= DEG_TO_RAD(360);
+    // if (q(5) > DEG_TO_RAD(180)) q(5) -= DEG_TO_RAD(360);
 
     // compute joint torques for gravity compensation
     // id_solver.CartToJnt(q, qd, qdd, f_ext, tau);
-    nid_solver.CartToJnt(q, qd, qdd, f_ext, tau);
+    nid_solver.CartToJnt(q, zeroArray, zeroArray, f_ext, gtau);
+
+    for (unsigned int i = 0; i < NUM_JOINTS; i++)
+    {
+      etau(i) = mtau(i) - gtau(i);
+    }
+
 
     // logger->info("{},{},{},{}", 
     //     jntArrayToCSV(q),
     //     jntArrayToCSV(qd),
     //     jntArrayToCSV(qdd),
     //     jntArrayToCSV(tau));
+    
+     
+    for (unsigned int i = 0; i < NUM_JOINTS; i++)
+    {
+      ctau(i) = gtau(i);
+    }
 
     // update the base command with the computed torques
     for (unsigned int i = 0; i < NUM_JOINTS; i++)
     {
       base_command.mutable_actuators(i)->set_position(base_feedback.actuators(i).position());
-      base_command.mutable_actuators(i)->set_torque_joint(tau(i));
+      base_command.mutable_actuators(i)->set_torque_joint(ctau(i));
     }
 
     // Incrementing identifier ensures actuators can reject out of time frames

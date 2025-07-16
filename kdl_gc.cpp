@@ -109,7 +109,7 @@ int main(int argc, char ** argv)
     
     std::cout << "Segment [" << i << "] " << name << ":\n" << f_tip << "\n\n";
 
-    KDL::Frame f_new = f_tip * transforms[i];
+    KDL::Frame f_new = transforms[i] * f_tip;
 
     std::cout << "nSegment [" << i << "] " << name << ":\n" << f_new << "\n\n";
 
