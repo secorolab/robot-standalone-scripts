@@ -16,3 +16,41 @@ All scripts have communication with the robots using platform specific APIs with
 
 ### Utilities
 - [kdl_parser](https://github.com/secorolab/kdl_parser)
+
+## Installation instructions
+- Clone the repository, then create the following folder structure inside the root directory:
+  ```
+  ├─bin
+  └─install
+    ├── include
+    └── lib
+  ```
+- Download and extract the Kortex API, then:
+  - Copy all files from the `common` folder into:
+`install/include/kortex_api/`
+  - Copy all `*.a` files from the release folder into:
+`install/lib/`
+- Install required system libraries using apt:
+  ```
+  sudo apt-get install libtinyxml-dev liburdfdom-dev liburdfdom-headers-dev
+  ```
+- Clone remaining dependencies. For each dependency:
+  - Navigate to the directory where `CMakeLists.txt` is located
+  - Create a build directory at the same level:
+    ```
+    mkdir build && cd build
+    ```
+  - Run CMake, specifying the path to the install directory from step
+    ```
+    cmake .. -DCMAKE_INSTALL_PREFIX=<absolute_path_to_install_directory>
+    ```
+  - Compile and install the package:
+    ```
+    make
+    sudo make install
+    ```
+- Run the relevant command from the `Makefile`. Example to create executable for `kdl_gc` can be found below
+  ```
+  make kdl_gc
+  ```
+- The executable is generated in `bin/` folder

@@ -44,6 +44,7 @@ namespace k_api = Kinova::Api;
 #define PORT_REAL_TIME 10001
 #define IP_ADDRESS "192.168.1.12"
 #define NUM_JOINTS 7
+#define SET_POINT_UPDATE_TIME 1000 // milliseconds
 
 void handle_kill_signal(int sig) {
   static int signal_caught = 0;
@@ -71,6 +72,13 @@ std::string wrenchToCSV(const KDL::Wrench& wrench) {
         << "," << wrench.torque.x() << "," << wrench.torque.y() << "," << wrench.torque.z();
     return oss.str();
 }
+
+// Helper lambda function to normalize angle differences to [-pi, pi]
+auto normalize_angle_diff = [](double diff) -> double {
+    if (diff > M_PI) return diff - 2 * M_PI;
+    if (diff < -M_PI) return diff + 2 * M_PI;
+    return diff;
+};
 
 int main(int argc, char ** argv)
 {
@@ -252,6 +260,10 @@ int main(int argc, char ** argv)
   KDL::JntArray qdd(num_joints);
   KDL::JntArray mtau(num_joints);
   KDL::Wrenches f_ext(num_segments, KDL::Wrench::Zero());
+
+  KDL::JntArray q_sp(num_joints);
+  KDL::JntArray e_q(num_joints);
+  std::vector<double> jnt_stiffness = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
   
   KDL::JntArray gtau(num_joints);
   KDL::JntArray etau(num_joints);
@@ -351,6 +363,9 @@ int main(int argc, char ** argv)
   // ---------------------- control loop ----------------------
   std::cout << "starting gravity comp" << std::endl;
 
+  // Initialize the previous time for updating set points at a fixed rate
+  auto prev_time = std::chrono::high_resolution_clock::now();
+
   while(true) {
     if (kill_flag) {
       break;
@@ -367,9 +382,9 @@ int main(int argc, char ** argv)
       mtau(i) = base_feedback.actuators(i).torque();
     }
 
-    // if (q(1) > DEG_TO_RAD(180)) q(1) -= DEG_TO_RAD(360);
-    // if (q(3) > DEG_TO_RAD(180)) q(3) -= DEG_TO_RAD(360);
-    // if (q(5) > DEG_TO_RAD(180)) q(5) -= DEG_TO_RAD(360);
+    if (q(1) > DEG_TO_RAD(180)) q(1) -= DEG_TO_RAD(360);
+    if (q(3) > DEG_TO_RAD(180)) q(3) -= DEG_TO_RAD(360);
+    if (q(5) > DEG_TO_RAD(180)) q(5) -= DEG_TO_RAD(360);
 
     // compute joint torques for gravity compensation
     // id_solver.CartToJnt(q, qd, qdd, f_ext, tau);
@@ -380,6 +395,23 @@ int main(int argc, char ** argv)
       etau(i) = mtau(i) - gtau(i);
     }
 
+    for (int i = 0; i < NUM_JOINTS; i++)
+    {
+      if (start_time - prev_time < std::chrono::milliseconds(SET_POINT_UPDATE_TIME))
+      {
+        q_sp(i) = base_feedback.actuators(i).position();
+        prev_time = start_time;
+      }
+      e_q(i) = q_sp(i) - q(i);
+      // Normalize angular difference for continuous revolute joints (0,2,4,6)
+      if (i % 2 == 0)
+      {
+        e_q(i) = normalize_angle_diff(e_q(i));
+      }
+      ctau(i) = jnt_stiffness[i] * e_q(i) + gtau(i);
+    }
+
+
 
     // logger->info("{},{},{},{}", 
     //     jntArrayToCSV(q),
@@ -388,10 +420,10 @@ int main(int argc, char ** argv)
     //     jntArrayToCSV(tau));
     
      
-    for (unsigned int i = 0; i < NUM_JOINTS; i++)
-    {
-      ctau(i) = gtau(i);
-    }
+    // for (unsigned int i = 0; i < NUM_JOINTS; i++)
+    // {
+    //   ctau(i) = gtau(i);
+    // }
 
     // update the base command with the computed torques
     for (unsigned int i = 0; i < NUM_JOINTS; i++)
