@@ -15,4 +15,4 @@ All scripts have communication with the robots using platform specific APIs with
 - [pinocchio](https://github.com/stack-of-tasks/pinocchio)
 
 ### Utilities
-- [kdl_parser](https://github.com/ros/kdl_parser)
+- [kdl_parser](https://github.com/secorolab/kdl_parser)
