@@ -299,46 +299,22 @@ int main(int argc, char ** argv)
 
     std::cout << "CONTROL MESSAGE: " << control_mode_message.control_mode() << std::endl;
 
-    for (int id = 0; id < NUM_JOINTS; id++)
-    {
-      for (unsigned int i = 0; i < NUM_JOINTS; i++)
-        base_command.mutable_actuators(i)->set_position(base_feedback.actuators(i).position());
-
-      for (int j = 0; j < id+1; j++)
-        base_command.mutable_actuators(j)->set_torque_joint(base_feedback.actuators(j).torque());
-
+    for (unsigned int id = 0; id < NUM_JOINTS; id++)
       actuator_config->SetControlMode(control_mode_message, id+1);
+    
+    // Incrementing identifier ensures actuators can reject out of time frames
+    base_command.set_frame_id(base_command.frame_id() + 1);
+    if (base_command.frame_id() > 65535) base_command.set_frame_id(0);
 
-      // Incrementing identifier ensures actuators can reject out of time frames
-      base_command.set_frame_id(base_command.frame_id() + 1);
-      if (base_command.frame_id() > 65535)
-        base_command.set_frame_id(0);
-
-      for (int idx = 0; idx < NUM_JOINTS; idx++)
-      {
-        base_command.mutable_actuators(idx)->set_command_id(base_command.frame_id());
-      }
-
-      try
-      {
-        base_feedback = base_cyclic->Refresh(base_command, 0);
-      }
-      catch (k_api::KDetailedException& ex)
-      {
-        std::cout << "Kortex exception: " << ex.what() << std::endl;
-
-        std::cout << "Error sub-code: " << k_api::SubErrorCodes_Name(k_api::SubErrorCodes((ex.getErrorInfo().getError().error_sub_code()))) << std::endl;
-      }
-      catch (std::runtime_error& ex2)
-      {
-        std::cout << "runtime error: " << ex2.what() << std::endl;
-      }
-      catch(...)
-      {
-        std::cout << "Unknown error." << std::endl;
-      }
-
+    for (unsigned int i = 0; i < NUM_JOINTS; i++)
+    {
+      base_command.mutable_actuators(i)->set_command_id(base_command.frame_id());
+      base_command.mutable_actuators(i)->set_position(base_feedback.actuators(i).position());
+      base_command.mutable_actuators(i)->set_torque_joint(base_feedback.actuators(i).torque());
     }
+
+    base_feedback = base_cyclic->Refresh(base_command, 0);
+
   } catch (k_api::KDetailedException& ex) {
       std::cout << "API error: " << ex.what() << std::endl;
 
@@ -360,6 +336,11 @@ int main(int argc, char ** argv)
 
       return 1;
   }
+  catch(...)
+  {
+    std::cout << "Unknown error." << std::endl;
+  }
+
 
   float control_freq = 1000.0; // Control frequency in Hz
 
@@ -421,13 +402,10 @@ int main(int argc, char ** argv)
 
     // Incrementing identifier ensures actuators can reject out of time frames
     base_command.set_frame_id(base_command.frame_id() + 1);
-    if (base_command.frame_id() > 65535)
-      base_command.set_frame_id(0);
+    if (base_command.frame_id() > 65535) base_command.set_frame_id(0);
 
     for (int idx = 0; idx < NUM_JOINTS; idx++)
-    {
       base_command.mutable_actuators(idx)->set_command_id(base_command.frame_id());
-    }
 
     try
     {
