@@ -70,7 +70,7 @@ int main()
 
     float control_freq = 1000.0; // Control frequency in Hz
 
-    const std::string urdf_filename = std::string("../gen3.urdf");
+    const std::string urdf_filename = std::string("gen3.urdf");
  
     KDL::Tree tree;
     if (!kdl_parser::treeFromFile(urdf_filename, tree)) {

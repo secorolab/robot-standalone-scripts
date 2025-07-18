@@ -12,7 +12,7 @@
 
 int main(int argc, char ** argv)
 {
-  const std::string urdf_filename = std::string("../gen3.urdf");
+  const std::string urdf_filename = std::string("gen3.urdf");
  
   KDL::Tree tree;
   if (!kdl_parser::treeFromFile(urdf_filename, tree)) {
@@ -25,6 +25,7 @@ int main(int argc, char ** argv)
     return -1;
   }
 
+  // calibration offsets for right-arm
   KDL::Frame transforms[8] = {
     KDL::Frame(
       KDL::Rotation(
@@ -116,7 +117,7 @@ int main(int argc, char ** argv)
     KDL::Segment updated_segment(
       name,                          // Same name
       segment.getJoint(),            // Same joint
-      f_new,                     // Updated fixed transform
+      f_new,                         // Updated fixed transform
       segment.getInertia()           // Same inertia
     );
 

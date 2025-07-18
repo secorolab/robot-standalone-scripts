@@ -30,8 +30,6 @@
 #include "kdl/frames_io.hpp"
 #include "kdl/chainidsolver_recursive_newton_euler.hpp"
 
-#include "spdlog/spdlog.h"
-#include "spdlog/sinks/basic_file_sink.h"
 
 volatile sig_atomic_t kill_flag = 0;
 
@@ -44,7 +42,6 @@ namespace k_api = Kinova::Api;
 #define PORT_REAL_TIME 10001
 #define IP_ADDRESS "192.168.1.12"
 #define NUM_JOINTS 7
-#define SET_POINT_UPDATE_TIME 1000 // milliseconds
 
 void handle_kill_signal(int sig) {
   static int signal_caught = 0;
@@ -73,13 +70,6 @@ std::string wrenchToCSV(const KDL::Wrench& wrench) {
     return oss.str();
 }
 
-// Helper lambda function to normalize angle differences to [-pi, pi]
-auto normalize_angle_diff = [](double diff) -> double {
-    if (diff > M_PI) return diff - 2 * M_PI;
-    if (diff < -M_PI) return diff + 2 * M_PI;
-    return diff;
-};
-
 int main(int argc, char ** argv)
 {
   struct sigaction sa;
@@ -92,15 +82,6 @@ int main(int argc, char ** argv)
       perror("sigaction error");
     }
   }
-
-  // std::shared_ptr<spdlog::logger> logger;
-  //
-  // try {
-  //   logger = spdlog::basic_logger_mt("kinova_logger", "logs/kinova-kdl-gc-log.csv");
-  // } catch (const spdlog::spdlog_ex &ex) {
-  //   std::cout << "Log init failed: " << ex.what() << std::endl;
-  // }
-  // logger->set_pattern("%v");
 
   // --------------------- kinova ----------------------
   auto error_callback = [](k_api::KError err){ cout << "_________ callback error _________" << err.toString(); };
@@ -135,9 +116,9 @@ int main(int argc, char ** argv)
   auto base_cyclic = new k_api::BaseCyclic::BaseCyclicClient(router_real_time);
   auto actuator_config = new k_api::ActuatorConfig::ActuatorConfigClient(router);
 
-  // --------------------- kinova ----------------------
+  // --------------------- kdl ----------------------
 
-  const std::string urdf_filename = std::string("../gen3.urdf");
+  const std::string urdf_filename = std::string("gen3.urdf");
   
   KDL::Tree tree;
   if (!kdl_parser::treeFromFile(urdf_filename, tree)) {
@@ -150,6 +131,7 @@ int main(int argc, char ** argv)
     return -1;
   }
 
+  // calibration offsets for right-arm
   KDL::Frame transforms[8] = {
     KDL::Frame(
       KDL::Rotation(
@@ -232,11 +214,7 @@ int main(int argc, char ** argv)
     const std::string& name = segment.getName();
     const KDL::Frame& f_tip = segment.getFrameToTip();
     
-    // std::cout << "Segment [" << i << "] " << name << ":\n" << f_tip << "\n\n";
-
     KDL::Frame f_new = f_tip * transforms[i];
-
-    // std::cout << "nSegment [" << i << "] " << name << ":\n" << f_new << "\n\n";
 
     KDL::Segment updated_segment(
       name,                          // Same name
@@ -260,10 +238,6 @@ int main(int argc, char ** argv)
   KDL::JntArray qdd(num_joints);
   KDL::JntArray mtau(num_joints);
   KDL::Wrenches f_ext(num_segments, KDL::Wrench::Zero());
-
-  KDL::JntArray q_sp(num_joints);
-  KDL::JntArray e_q(num_joints);
-  std::vector<double> jnt_stiffness = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
   
   KDL::JntArray gtau(num_joints);
   KDL::JntArray etau(num_joints);
@@ -325,7 +299,7 @@ int main(int argc, char ** argv)
       base_command.mutable_actuators(i)->set_torque_joint(base_feedback.actuators(i).torque());
     }
 
-    base_feedback = base_cyclic->Refresh(base_command, 0);
+    // base_feedback = base_cyclic->Refresh(base_command, 0);
 
   } catch (k_api::KDetailedException& ex) {
       std::cout << "API error: " << ex.what() << std::endl;
@@ -356,16 +330,16 @@ int main(int argc, char ** argv)
 
   float control_freq = 1000.0; // Control frequency in Hz
 
-  // logger->info("q0,q1,q2,q3,q4,q5,qd0,qd1,qd2,qd3,qd4,qd5,"
-                 // "qdd0,qdd1,qdd2,qdd3,qdd4,qdd5,"
-                 // "tau0,tau1,tau2,tau3,tau4,tau5");
-
   // ---------------------- control loop ----------------------
-  std::cout << "starting gravity comp" << std::endl;
+  std::cout << "starting gravity comp + control" << std::endl;
 
-  // Initialize the previous time for updating set points at a fixed rate
-  auto prev_time = std::chrono::high_resolution_clock::now();
+  bool set_qref = true;
+  KDL::JntArray qref(num_joints);
 
+  double KP = 10;
+  double KD = 0;
+
+  base_feedback = base_cyclic->Refresh(base_command, 0);
   while(true) {
     if (kill_flag) {
       break;
@@ -382,54 +356,43 @@ int main(int argc, char ** argv)
       mtau(i) = base_feedback.actuators(i).torque();
     }
 
-    if (q(1) > DEG_TO_RAD(180)) q(1) -= DEG_TO_RAD(360);
-    if (q(3) > DEG_TO_RAD(180)) q(3) -= DEG_TO_RAD(360);
-    if (q(5) > DEG_TO_RAD(180)) q(5) -= DEG_TO_RAD(360);
+    if (set_qref)
+    {
+      for (unsigned int i = 0; i < NUM_JOINTS; i++)
+        qref(i) = q(i);
+
+      set_qref = false;
+    }
+
+    // if (q(1) > DEG_TO_RAD(180)) q(1) -= DEG_TO_RAD(360);
+    // if (q(3) > DEG_TO_RAD(180)) q(3) -= DEG_TO_RAD(360);
+    // if (q(5) > DEG_TO_RAD(180)) q(5) -= DEG_TO_RAD(360);
 
     // compute joint torques for gravity compensation
     // id_solver.CartToJnt(q, qd, qdd, f_ext, tau);
+
+    // solver with including [T] corrections from calibration
     nid_solver.CartToJnt(q, zeroArray, zeroArray, f_ext, gtau);
 
     for (unsigned int i = 0; i < NUM_JOINTS; i++)
     {
-      etau(i) = mtau(i) - gtau(i);
+      // estimated external torques = measured torques (from torque sensors) + rnea gravity comp. torques
+      // (+) to get the difference
+      etau(i) = mtau(i) + gtau(i); // replace gtau with ctau??
+
+      if (etau(i) > 1.5) set_qref = true;
     }
 
-    for (int i = 0; i < NUM_JOINTS; i++)
-    {
-      if (start_time - prev_time < std::chrono::milliseconds(SET_POINT_UPDATE_TIME))
-      {
-        q_sp(i) = base_feedback.actuators(i).position();
-        prev_time = start_time;
-      }
-      e_q(i) = q_sp(i) - q(i);
-      // Normalize angular difference for continuous revolute joints (0,2,4,6)
-      if (i % 2 == 0)
-      {
-        e_q(i) = normalize_angle_diff(e_q(i));
-      }
-      ctau(i) = jnt_stiffness[i] * e_q(i) + gtau(i);
-    }
-
-
-
-    // logger->info("{},{},{},{}", 
-    //     jntArrayToCSV(q),
-    //     jntArrayToCSV(qd),
-    //     jntArrayToCSV(qdd),
-    //     jntArrayToCSV(tau));
-    
-     
-    // for (unsigned int i = 0; i < NUM_JOINTS; i++)
-    // {
-    //   ctau(i) = gtau(i);
-    // }
+    // control  
+    for (unsigned int i = 0; i < NUM_JOINTS; i++)
+      ctau(i) = gtau(i) + (KD * (0.0 - qd(i))) + (KP * (qref(i) - q(i)));
 
     // update the base command with the computed torques
     for (unsigned int i = 0; i < NUM_JOINTS; i++)
     {
-      base_command.mutable_actuators(i)->set_position(base_feedback.actuators(i).position());
       base_command.mutable_actuators(i)->set_torque_joint(ctau(i));
+      // Unconditionally set the position command to avoid too large deviations
+      base_command.mutable_actuators(i)->set_position(base_feedback.actuators(i).position());
     }
 
     // Incrementing identifier ensures actuators can reject out of time frames
@@ -439,6 +402,7 @@ int main(int argc, char ** argv)
     for (int idx = 0; idx < NUM_JOINTS; idx++)
       base_command.mutable_actuators(idx)->set_command_id(base_command.frame_id());
 
+    // refresh
     try
     {
       base_feedback = base_cyclic->Refresh(base_command, 0);
