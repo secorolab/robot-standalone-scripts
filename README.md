@@ -18,16 +18,17 @@ All scripts have communication with the robots using platform specific APIs with
 
 ## Setup
 
-- Clone the repository, then create the following folder structure inside the root directory:
+- Clone the repository,
+- A sample of root directory:
   ```
-  ├── bin
+  ├── bin/
   ├── gen3.urdf
-  ├── install
-  ├── kdl_parser
+  ├── install/
+  ├── kdl_parser/
   ├── Makefile
-  ├── orocos_kinematics_dynamics
+  ├── orocos_kinematics_dynamics/
   ├── README.md
-  └── src
+  └── src/
   ```
 
 - Install required system libraries using apt:
