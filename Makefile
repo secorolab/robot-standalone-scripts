@@ -77,6 +77,14 @@ kinova_kdl_gc: $(KINOVA_DIR)/kinova_kdl_gc.cpp setup kortex_setup
 
 kinova_kdl_gc_ctrl: $(KINOVA_DIR)/kinova_kdl_gc_ctrl.cpp setup kortex_setup
 	$(CXX) $(CXXFLAGS) $< ${KORTEX_API_INCLUDES} ${KDL_LIBS} $(KORTEX_LIBS) -o $(BIN_DIR)/$@
+
+kinova_torque_cntrl: $(KINOVA_DIR)/kinova_torque_cntrl.cpp setup kortex_setup
+	$(CXX) $(CXXFLAGS) $< ${KORTEX_API_INCLUDES} ${KDL_LIBS} $(KORTEX_LIBS) -o $(BIN_DIR)/$@
+
+kinova_admittance: $(KINOVA_DIR)/kinova_admittance.cpp setup kortex_setup
+	$(CXX) $(CXXFLAGS) $< ${KORTEX_API_INCLUDES} ${KDL_LIBS} $(KORTEX_LIBS) -o $(BIN_DIR)/$@
+
+
 # --------- clean ----------------------------
 clean:
 	rm -rf $(BIN_DIR) $(INSTALL_DIR)

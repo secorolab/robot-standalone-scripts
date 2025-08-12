@@ -2,7 +2,6 @@
 #include <cstdio>
 #include <cstring>
 #include <iostream>
-#include <sstream>
 #include <string>
 #include <math.h>
 #include <unistd.h>
@@ -10,6 +9,7 @@
 #include <chrono>
 #include <csignal>
 
+#include "Base.pb.h"
 #include "kortex_api/common/KDetailedException.h"
 
 #include "kortex_api/client_stubs/BaseClientRpc.h"
@@ -24,10 +24,7 @@
 #include "kdl_parser/kdl_parser.hpp"
 
 #include "kdl/chain.hpp"
-#include "kdl/kinfam_io.hpp"
-#include "kdl/frames_io.hpp"
 #include "kdl/chainidsolver_recursive_newton_euler.hpp"
-
 
 volatile sig_atomic_t kill_flag = 0;
 
@@ -140,11 +137,29 @@ int main(int argc, char ** argv)
       return 1;
   }
 
-  // ---------------------- torque mode ----------------------
   k_api::BaseCyclic::Feedback base_feedback;
   k_api::BaseCyclic::Command  base_command;
 
   auto servoing_mode = k_api::Base::ServoingModeInformation();
+
+  // set admittance mode
+  Kinova::Api::Base::Admittance admittance;
+  admittance.set_admittance_mode(Kinova::Api::Base::AdmittanceMode::JOINT);
+  base->SetAdmittance(admittance);
+
+  int count = 0;
+  while(5000) {
+    if (kill_flag) {
+      break;
+    }
+
+    count++;
+    
+    base_feedback = base_cyclic->RefreshFeedback();
+  }
+
+  admittance.set_admittance_mode(Kinova::Api::Base::AdmittanceMode::DISABLED);
+  base->SetAdmittance(admittance);
 
   try {
     // Set the base in low-level servoing mode
@@ -171,6 +186,7 @@ int main(int argc, char ** argv)
     // Incrementing identifier ensures actuators can reject out of time frames
     base_command.set_frame_id(base_command.frame_id() + 1);
     if (base_command.frame_id() > 65535) base_command.set_frame_id(0);
+
 
     for (unsigned int i = 0; i < NUM_JOINTS; i++)
       q(i) = DEG_TO_RAD(base_feedback.actuators(i).position());
@@ -220,7 +236,7 @@ int main(int argc, char ** argv)
   KDL::JntArray qref(num_joints);
 
   double KP = 5;
-  double KD = 0.1;
+  double KD = 0.3;
 
   base_feedback = base_cyclic->Refresh(base_command, 0);
   while(true) {
@@ -276,7 +292,6 @@ int main(int argc, char ** argv)
       base_command.mutable_actuators(i)->set_command_id(base_command.frame_id());
     }
 
-
     // refresh
     try
     {
@@ -317,6 +332,7 @@ int main(int argc, char ** argv)
   {
     actuator_config->SetControlMode(control_mode_message, id+1);
   }
+
 
   // Set the servoing mode back to Single Level
   servoing_mode.set_servoing_mode(k_api::Base::ServoingMode::SINGLE_LEVEL_SERVOING);
