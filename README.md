@@ -98,3 +98,7 @@ All scripts have communication with the robots using platform specific APIs with
   make kinova_kdl_gc_ctrl
   ```
 
+### kinova_admittance
+
+- Make use [Admittance](https://github.com/Kinovarobotics/Kinova-kortex2_Gen3_G3L/tree/master/api_cpp/doc/markdown/messages/Base) API from the `base` to set the arm into admittance mode.
+- Also shows switch from `admittance` mode to `torque` control mode. 
