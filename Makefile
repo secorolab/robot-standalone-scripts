@@ -22,11 +22,11 @@ KORTEX_LIBS 	:= -lKortexApiCpp
 
 RUNTIME_PATH 	:= -Wl,-rpath,$(INSTALL_DIR)/lib
 
-KORTEX_API 		:= https://artifactory.kinovaapps.com/artifactory/generic-local-public/kortex/API/2.6.0/linux_x86_64_gcc_5.4.zip
+KORTEX_API 		:= https://artifactory.kinovaapps.com/artifactory/generic-public/kortex/API/2.7.0/linux_x86-64_gcc_5.4.zip
 KDL_PARSER 		:= https://github.com/secorolab/kdl_parser/archive/refs/tags/v1.0.0.zip
 
 CXX        	  := g++
-CXXFLAGS    	:= -std=c++17 -D_OS_UNIX -Wno-deprecated-declarations $(W_FLAGS) $(INCLUDE_DIRS) $(EIGEN_FLAGS) $(RUNTIME_PATH) $(LIB_DIRS)
+CXXFLAGS    	:= -std=c++23 -D_OS_UNIX -Wno-deprecated-declarations $(W_FLAGS) $(INCLUDE_DIRS) $(EIGEN_FLAGS) $(RUNTIME_PATH) $(LIB_DIRS)
 
 KINOVA_DIR 		:= src/kinova/
 
@@ -84,6 +84,8 @@ kinova_torque_cntrl: $(KINOVA_DIR)/kinova_torque_cntrl.cpp setup kortex_setup
 kinova_admittance: $(KINOVA_DIR)/kinova_admittance.cpp setup kortex_setup
 	$(CXX) $(CXXFLAGS) $< ${KORTEX_API_INCLUDES} ${KDL_LIBS} $(KORTEX_LIBS) -o $(BIN_DIR)/$@
 
+kinova_hl_wrench: $(KINOVA_DIR)/kinova_wrench_command.cpp setup kortex_setup
+	$(CXX) $(CXXFLAGS) $< ${KORTEX_API_INCLUDES} $(KORTEX_LIBS) -o $(BIN_DIR)/$@
 
 # --------- clean ----------------------------
 clean:
