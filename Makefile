@@ -1,5 +1,5 @@
 BIN_DIR 		:= ${PWD}/bin
-INSTALL_DIR := ${PWD}/install
+INSTALL_DIR := ${PWD}/../install
 
 KORTEX_API_INCLUDES := \
   -I$(INSTALL_DIR)/include/kortex_api \
@@ -86,6 +86,9 @@ kinova_admittance: $(KINOVA_DIR)/kinova_admittance.cpp setup kortex_setup
 
 kinova_hl_wrench: $(KINOVA_DIR)/kinova_wrench_command.cpp setup kortex_setup
 	$(CXX) $(CXXFLAGS) $< ${KORTEX_API_INCLUDES} $(KORTEX_LIBS) -o $(BIN_DIR)/$@
+
+kinova_uart: $(KINOVA_DIR)/kinova_uart.cpp setup kortex_setup
+	$(CXX) $(CXXFLAGS) $< ${KORTEX_API_INCLUDES} $(KORTEX_LIBS) -lrobotiq_driver_noros -lserial -o $(BIN_DIR)/$@
 
 # --------- clean ----------------------------
 clean:
